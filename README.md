@@ -65,13 +65,6 @@ No libraries
 No game engines
 
 🚀 How to Run
-Clone the repository
-git clone https://github.com/your-username/ashok-vatika-chaos.git
-Open the game
-open index.html
-or simply double-click the HTML file.
-✔️ Works entirely offline
-✔️ Runs in any modern browser
 
 📖 Story Context
 Ashok Vatika Chaos is inspired by events from the Ramayan, focusing on Hanuman’s destruction of Ashok Vatika and his battles against Ravana’s generals.
