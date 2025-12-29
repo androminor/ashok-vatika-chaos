@@ -1,6 +1,6 @@
 # ashok-vatika-chaos 
-Check -> https://ashok-vatika-chaos.vercel.app/
-
+🚀 How to Run
+https://ashok-vatika-chaos.vercel.app/
 Sri Hanuman destroying ashok vatika during lanka visit
 
 🐒🔥 Ashok Vatika Chaos — Ramayan Edition
@@ -66,9 +66,6 @@ Web Audio API
 No frameworks
 No libraries
 No game engines
-
-🚀 How to Run
-https://ashok-vatika-chaos.vercel.app/
 
 📖 Story Context
 Ashok Vatika Chaos is inspired by events from the Ramayan, focusing on Hanuman’s destruction of Ashok Vatika and his battles against Ravana’s generals.
