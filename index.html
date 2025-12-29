@@ -1,0 +1,2976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ashok Vatika Chaos — Ramayan Edition</title>
+<style>
+  :root{--panel-bg: rgba(0,0,0,.22); --btn:#ffef9f}
+  html,body{height:100%;margin:0;background:#0b1020;color:#fff;font-family:system-ui,Segoe UI,Roboto}
+  .wrap{display:flex;flex-direction:column;align-items:center;padding:12px;box-sizing:border-box;height:100%}
+  canvas{width:100%;max-width:1100px;height:calc(100vh - 150px);border-radius:10px;display:block;background:linear-gradient(#87CEEB,#7FB3FF 60%)}
+  .hud{width:100%;max-width:1100px;display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .panel{background:var(--panel-bg);padding:8px 12px;border-radius:8px;display:flex;gap:12px;align-items:center}
+  .btn{background:var(--btn);color:#111;border:0;padding:6px 10px;border-radius:6px;font-weight:600;cursor:pointer}
+  .btn.secondary{background:#fff1f1}
+  .muted{opacity:.9;font-size:13px}
+  .small{font-size:13px;opacity:.9}
+  .center{display:flex;gap:8px;align-items:center}
+  .game-over{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:none;justify-content:center;align-items:center;z-index:1000}
+  .game-over.show{display:flex}
+  .game-over-content{background:#1a1a2e;padding:40px;border-radius:20px;text-align:center;border:3px solid #FFD700}
+  .game-over h1{font-size:48px;color:#FFD700;margin:0 0 20px 0;text-shadow:2px 2px 4px #000}
+  .game-over p{font-size:24px;margin:10px 0}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="panel center">
+        <div style="font-weight:700">Ashok Vatika Chaos</div>
+        <div class="muted small">— Hanuman's Gada vs Rakshas</div>
+      </div>
+
+      <div style="flex:1"></div>
+
+      <div class="panel center">
+        <div style="text-align:right">
+          <div style="font-weight:700">Score <span id="score">0</span></div>
+          <div class="small muted">High <span id="high">0</span></div>
+        </div>
+        <div style="width:12px"></div>
+        <div class="small muted">Level <span id="level">1</span></div>
+        <button id="pause" class="btn secondary">Pause</button>
+        <button id="retry" class="btn">Retry</button>
+      </div>
+      <div id="bossStatus" style="margin-top:8px;padding:8px;background:rgba(0,0,0,0.7);border-radius:4px;text-align:center;font-weight:bold;font-size:14px;color:#ffaa00;display:none;"></div>
+    </div>
+
+    <canvas id="game"></canvas>
+    <div style="margin-top:6px;max-width:1100px;font-size:12px;color:#ddd">
+      <strong>Controls:</strong> Drag/touch vertically to move Hanuman. Space to throw gada manually (auto-throws too). Trees burn when you pass! Press <strong>M</strong> to toggle sound ON/OFF.
+      <br>
+      <strong style="color:#ffaa00">🧪 DEBUG MODE:</strong> Press number keys <strong>1-7</strong> to instantly spawn and test each boss! Press F12 for console.
+    </div>
+  </div>
+
+  <div class="game-over" id="gameOver">
+    <div class="game-over-content">
+      <h1>🎉 VICTORY! 🎉</h1>
+      <p>Hanuman has defeated all demon commanders!</p>
+      <p>Ashok Vatika is destroyed!</p>
+      <p style="font-size:32px;color:#FFD700;margin-top:20px">Final Score: <span id="finalScore">0</span></p>
+      <button class="btn" style="margin-top:30px;padding:12px 24px;font-size:18px" onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+
+  <div class="game-over" id="toBeContinued">
+    <div class="game-over-content" style="border-color:#ff00ff">
+      <h1 style="color:#ff00ff">⚡ CAPTURED! ⚡</h1>
+      <p style="font-size:28px;margin:20px 0">Meghnath has bound Hanuman with the Brahmastra!</p>
+      <p style="font-size:24px;color:#8B4513">Hanuman out of respect for Brahma chanted - "ॐ ब्रह्मणे नमः"</p>
+      <p style="font-size:22px;color:#ffaa00;margin-top:10px">& taken to Lanka Mahal...</p>
+      <p style="font-size:48px;color:#ff00ff;margin-top:30px;font-weight:bold;text-shadow:0 0 20px #ff00ff">TO BE CONTINUED</p>
+      <p style="font-size:20px;margin-top:20px">Final Score: <span id="captureScore">0</span></p>
+      <button class="btn" style="margin-top:30px;padding:12px 24px;font-size:18px;background:#ff00ff" onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const highEl = document.querySelector('#high');
+  const levelEl = document.getElementById('level');
+  const pauseBtn = document.getElementById('pause');
+  const retryBtn = document.getElementById('retry');
+  const gameOverEl = document.getElementById('gameOver');
+  const finalScoreEl = document.getElementById('finalScore');
+  const toBeContinuedEl = document.getElementById('toBeContinued');
+  const captureScoreEl = document.getElementById('captureScore');
+  const bossStatusEl = document.getElementById('bossStatus');
+
+  // Sound System using Web Audio API
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  let soundEnabled = true;
+
+  function playSound(type) {
+    if (!soundEnabled) return;
+    
+    const now = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+    
+    switch(type) {
+      case 'gada_throw':
+        // Whoosh sound
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+        
+      case 'enemy_hit':
+        // Impact sound
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+        
+      case 'boss_hit':
+        // Deep impact
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+        break;
+        
+      case 'boss_defeat':
+        // Explosion sound
+        const noise = audioContext.createBufferSource();
+        const bufferSize = audioContext.sampleRate * 0.5;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        noise.buffer = buffer;
+        
+        const noiseFilter = audioContext.createBiquadFilter();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(1000, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, now + 0.5);
+        
+        const noiseGain = audioContext.createGain();
+        noiseGain.gain.setValueAtTime(0.6, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+        
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(audioContext.destination);
+        noise.start(now);
+        noise.stop(now + 0.5);
+        break;
+        
+      case 'tree_burn':
+        // Fire crackling
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.3);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+        
+      case 'level_up':
+        // Ascending chime
+        const frequencies = [523.25, 659.25, 783.99]; // C, E, G
+        frequencies.forEach((freq, i) => {
+          const noteOsc = audioContext.createOscillator();
+          const noteGain = audioContext.createGain();
+          noteOsc.connect(noteGain);
+          noteGain.connect(audioContext.destination);
+          
+          noteOsc.type = 'sine';
+          noteOsc.frequency.setValueAtTime(freq, now + i * 0.1);
+          noteGain.gain.setValueAtTime(0.3, now + i * 0.1);
+          noteGain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.3);
+          noteOsc.start(now + i * 0.1);
+          noteOsc.stop(now + i * 0.1 + 0.3);
+        });
+        break;
+        
+      case 'victory':
+        // Victory fanfare
+        const victoryNotes = [523.25, 659.25, 783.99, 1046.50]; // C, E, G, C
+        victoryNotes.forEach((freq, i) => {
+          const noteOsc = audioContext.createOscillator();
+          const noteGain = audioContext.createGain();
+          noteOsc.connect(noteGain);
+          noteGain.connect(audioContext.destination);
+          
+          noteOsc.type = 'triangle';
+          noteOsc.frequency.setValueAtTime(freq, now + i * 0.15);
+          noteGain.gain.setValueAtTime(0.4, now + i * 0.15);
+          noteGain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.5);
+          noteOsc.start(now + i * 0.15);
+          noteOsc.stop(now + i * 0.15 + 0.5);
+        });
+        break;
+        
+      case 'weapon_throw':
+        // Swish sound
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+    }
+  }
+
+  // Toggle sound on/off with M key
+  window.addEventListener('keydown', e => {
+    if (e.code === 'KeyM') {
+      soundEnabled = !soundEnabled;
+      console.log('Sound:', soundEnabled ? 'ON' : 'OFF');
+    }
+  });
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    screenW = rect.width;
+    screenH = rect.height;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  
+  let lastTime = performance.now();
+  let running = true;
+  let score = 0;
+  let high = parseInt(localStorage.getItem('vatika_high') || '0', 10) || 0;
+  let level = 1;
+  let screenW = 800;
+  let screenH = 600;
+  let gameCompleted = false;
+
+  resizeCanvas();
+
+  scoreEl.textContent = '0';
+  highEl.textContent = high;
+  levelEl.textContent = level;
+
+  const CONFIG = {
+    baseSpeed: 180,
+    rakshaIntervalMs: 900,
+    treeIntervalMs: 1400,
+    particleLimit: 500,
+    gadaSpeed: 900,
+    gadaReturnSpeed: 1100,
+    manaGrowPerLevel: 10,
+    maxLevel: 7,
+    bossSpawnAtLevel: 1,
+    weaponThrowChance: 0.012,
+    scorePerLevel: 1200,
+    minKillsForBoss: 17 // Boss arrives after 17 kills
+  };
+
+  const player = {
+    xPct: 0.18,
+    y: 0.45,
+    baseSize: 84,
+    size: 84
+  };
+
+  const rakshas = [];
+  const trees = [];
+  const particles = [];
+  const weapons = []; // Raksha weapons thrown at Hanuman
+  let boss = null;
+  let bossDefeatedAtLevel = 0;
+  let enemiesKilledThisLevel = 0; // Track kills for boss spawn condition
+  
+  // Brahmastra capture sequence (Meghnath Level 7)
+  let captureSequenceActive = false;
+  let capturePhase = 0; // 0: shooting, 1: binding, 2: captured, 3: nighttime, 4: namaskar descent
+  let brahmastraLoops = []; // Array of rope loops
+  let captureTimer = 0;
+  let nightDarkness = 0; // 0 to 1 for night fade effect
+  let hanumanRotation = 0; // Rotation angle for standing pose (0 to Math.PI/2)
+
+  const gada = {
+    state: 'idle',
+    x: 0,
+    y: 0,
+    vx: 0,
+    withHanuman: true
+  };
+
+  let accRaksha = 0;
+  let accTree = 0;
+  let accumulated = 0;
+
+  // Boss names for each level
+  const BOSS_NAMES = [
+    'Akampana',     // Level 1
+    'Prahasta',     // Level 2
+    'Virupaksha',   // Level 3
+    'Mahodara',     // Level 4
+    'Atikaya',      // Level 5
+    'Mahaparsva',   // Level 6 (swapped)
+    'Meghnath'      // Level 7 (final boss with Brahmastra capture)
+  ];
+
+  let pointerActive = false;
+  function pointerToNormY(clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return Math.max(0.06, Math.min(0.94, (clientY - rect.top) / rect.height));
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    pointerActive = true;
+    player.y = pointerToNormY(e.clientY);
+    if (gada.state === 'idle') {
+      fireGadaManual();
+    }
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!pointerActive) return;
+    player.y = pointerToNormY(e.clientY);
+  });
+  canvas.addEventListener('pointerup', e => {
+    pointerActive = false;
+  });
+
+  const keyState = { up: false, down: false };
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { 
+      e.preventDefault(); 
+      if (gada.state === 'idle') fireGadaManual(); 
+    }
+    if (e.code === 'ArrowUp') keyState.up = true;
+    if (e.code === 'ArrowDown') keyState.down = true;
+    if (e.code === 'KeyP') toggleRunning();
+    
+    // DEBUG: Test spawn bosses with number keys 1-7
+    if (e.key >= '1' && e.key <= '7') {
+      const testLevel = parseInt(e.key);
+      console.log('🧪 TEST SPAWNING BOSS FOR LEVEL', testLevel);
+      
+      // Force spawn boss for test level
+      const bossIndex = testLevel - 1;
+      boss = {
+        x: screenW * 0.7,
+        y: screenH * 0.78,
+        w: 220,
+        h: 240,
+        hp: 10,
+        maxHp: 10,
+        speed: 0, // Don't move for testing
+        level: testLevel,
+        name: BOSS_NAMES[bossIndex] || 'Demon Commander',
+        type: bossIndex
+      };
+      bossDefeatedAtLevel = testLevel - 1; // Allow level advancement
+      console.log('✅ TEST BOSS SPAWNED:', boss.name, '| Type:', boss.type, '| Level:', boss.level);
+    }
+  });
+  window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowUp') keyState.up = false;
+    if (e.code === 'ArrowDown') keyState.down = false;
+  });
+
+  pauseBtn.addEventListener('click', toggleRunning);
+  retryBtn.addEventListener('click', resetGame);
+
+  function toggleRunning() {
+    running = !running;
+    pauseBtn.textContent = running ? 'Pause' : 'Resume';
+    if (running) {
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+  }
+
+  const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+  const rand = (a,b) => a + Math.random() * (b - a);
+
+  function spawnParticles(x, y, n, colorChoices, speed = 160) {
+    for (let i = 0; i < n && particles.length < CONFIG.particleLimit; i++) {
+      particles.push({
+        x, y,
+        vx: rand(-1,1) * speed,
+        vy: rand(-1,1) * speed * 0.6 - speed * 0.2,
+        life: rand(0.5, 1.1),
+        size: rand(2, 5),
+        color: colorChoices[Math.floor(Math.random()*colorChoices.length)]
+      });
+    }
+  }
+
+  function spawnRaksha() {
+    const isFlying = Math.random() < 0.5;
+    
+    if (isFlying) {
+      const yPos = rand(0.25, 0.65);
+      rakshas.push({
+        x: screenW + 60,
+        y: yPos,
+        w: 54,
+        h: 64,
+        speed: rand(CONFIG.baseSpeed * 0.6, CONFIG.baseSpeed * 1.0),
+        runCycle: rand(0, Math.PI * 2),
+        isFlying: true,
+        waveOffset: rand(0, Math.PI * 2),
+        throwCooldown: 0
+      });
+    } else {
+      rakshas.push({
+        x: screenW + 60,
+        y: screenH * 0.82,
+        w: 64,
+        h: 74,
+        speed: rand(CONFIG.baseSpeed * 0.7, CONFIG.baseSpeed * 1.1),
+        runCycle: rand(0, Math.PI * 2),
+        isFlying: false,
+        throwCooldown: 0
+      });
+    }
+  }
+
+  function spawnTree() {
+    const fruits = ['banana', 'orange', 'mango'];
+    trees.push({
+      x: screenW + rand(40, 260),
+      y: screenH * 0.82,
+      trunkH: 70,
+      crownR: 36,
+      burned: false,
+      passedBy: false,
+      fireParticles: [],
+      fruitType: fruits[Math.floor(Math.random() * fruits.length)],
+      fruits: []
+    });
+    
+    const tree = trees[trees.length - 1];
+    const fruitCount = Math.floor(rand(3, 7));
+    for (let i = 0; i < fruitCount; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const dist = rand(tree.crownR * 0.3, tree.crownR * 0.8);
+      tree.fruits.push({
+        x: Math.cos(angle) * dist,
+        y: Math.sin(angle) * dist
+      });
+    }
+  }
+
+  function spawnBoss() {
+    if (boss || level > CONFIG.maxLevel) return;
+    
+    const bossIndex = level - 1; // 0-6 for levels 1-7
+    boss = {
+      x: screenW + 160,
+      y: screenH * 0.78,
+      w: 220,
+      h: 240,
+      hp: 6 + Math.floor(level / 2),
+      maxHp: 6 + Math.floor(level / 2), 
+      speed: -60,
+      level: level,
+      name: BOSS_NAMES[bossIndex] || 'Demon Commander',
+      type: bossIndex // Direct assignment: 0 for level 1, 1 for level 2, etc.
+    };
+    console.log('Boss spawned:', boss.name, 'Type:', boss.type, 'Level:', level);
+  }
+
+  function fireGadaManual() {
+    const pxPos = screenW * player.xPct;
+    const pyPos = screenH * player.y;
+    gada.state = 'outgoing';
+    gada.x = pxPos + player.size * 0.35;
+    gada.y = pyPos - player.size * 0.05;
+    gada.vx = CONFIG.gadaSpeed;
+    gada.withHanuman = false;
+    playSound('gada_throw');
+  }
+
+  function circleRectCollision(cx, cy, r, rx, ry, rw, rh) {
+    const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+    const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    return dx*dx + dy*dy <= r*r;
+  }
+
+  function drawParallaxBackground(offset) {
+    ctx.save();
+    const w = screenW, h = screenH;
+    
+    // Night sky gradient
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+    skyGrad.addColorStop(0, '#0a0a20');      // Dark blue-black at top
+    skyGrad.addColorStop(0.5, '#1a1a3a');    // Dark blue-purple mid
+    skyGrad.addColorStop(1, '#2a2a4a');      // Lighter purple at horizon
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, h);
+    
+    // Stars (always visible in night sky)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    for (let i = 0; i < 80; i++) {
+      const sx = (i * 137) % w;
+      const sy = (i * 211) % (h * 0.6);
+      const size = 1 + (i % 3);
+      const twinkle = Math.sin(offset * 0.002 + i) * 0.3 + 0.7;
+      ctx.globalAlpha = twinkle;
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    
+    // Distant mountains (silhouettes in night)
+    ctx.fillStyle = '#1a1a2a';
+    ctx.globalAlpha = 0.6;
+    for (let i = -1; i < 5; i++) {
+      const mw = w * 0.6;
+      const mx = (i * mw) - (offset * 0.02 % mw);
+      ctx.beginPath();
+      ctx.moveTo(mx, h * 0.55);
+      ctx.lineTo(mx + mw * 0.2, h * 0.42);
+      ctx.lineTo(mx + mw * 0.35, h * 0.46);
+      ctx.lineTo(mx + mw * 0.5, h * 0.38);
+      ctx.lineTo(mx + mw * 0.7, h * 0.44);
+      ctx.lineTo(mx + mw, h * 0.55);
+      ctx.lineTo(mx + mw, h);
+      ctx.lineTo(mx, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    
+    // Distant temple/palace silhouettes (dark against night sky)
+    ctx.fillStyle = '#0a0a15';
+    ctx.globalAlpha = 0.7;
+    const templeCount = 3;
+    for (let i = 0; i < templeCount; i++) {
+      const tx = ((i * 350) - (offset * 0.04) + 100) % (w + 300) - 150;
+      const ty = h * 0.52;
+      // Temple structure
+      ctx.fillRect(tx, ty, 60, 40);
+      // Dome/tower
+      ctx.beginPath();
+      ctx.moveTo(tx + 10, ty);
+      ctx.lineTo(tx + 30, ty - 30);
+      ctx.lineTo(tx + 50, ty);
+      ctx.closePath();
+      ctx.fill();
+      // Side towers
+      ctx.fillRect(tx - 8, ty + 10, 15, 30);
+      ctx.fillRect(tx + 53, ty + 10, 15, 30);
+    }
+    ctx.globalAlpha = 1;
+    
+    // Cloud layer (slow moving)
+    const cloudSpeed = offset * 0.05;
+    const cloudCount = Math.max(4, Math.round(w / 250));
+    for (let i = 0; i < cloudCount; i++) {
+      const cx = ((i * 280) + cloudSpeed * (i % 2 ? 1.3 : 0.8)) % (w + 240) - 140;
+      const cy = 50 + (i % 4) * 30 + Math.sin((i * 40 + offset * 0.03) / 50) * 15;
+      drawCloud(cx, cy, 70 + (i % 4) * 25);
+    }
+    
+    // Ground strip (dark green for night)
+    ctx.fillStyle = '#1a3a1a';
+    ctx.fillRect(0, h * 0.8, w, h * 0.2);
+    
+    // Atmospheric particles (magical sparkles for nighttime)
+    ctx.fillStyle = 'rgba(200, 220, 255, 0.7)';
+    for (let i = 0; i < 12; i++) {
+      const px = ((i * 120 + offset * 0.08) % w);
+      const py = (h * 0.3) + (i % 5) * 80 + Math.sin((offset * 0.03 + i * 15) / 40) * 30;
+      const size = 2 + (i % 3);
+      ctx.globalAlpha = 0.4 + Math.sin((offset * 0.05 + i) / 20) * 0.4;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    
+    ctx.restore();
+  }
+  
+  function drawCloud(x, y, size) {
+    ctx.save();
+    // Darker nighttime clouds
+    ctx.fillStyle = 'rgba(60, 60, 80, 0.5)';
+    ctx.shadowColor = 'rgba(60, 60, 80, 0.3)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.35, y + size * 0.08, size * 0.38, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.4, y + size * 0.05, size * 0.32, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.1, y - size * 0.15, size * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+  
+  
+  function drawHanuman(x, y, size, time, hasGada, inNamaskar = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Rotate to standing position during capture (gradual 0 to -90 degrees)
+    if (hanumanRotation !== 0) {
+      ctx.rotate(hanumanRotation);
+    }
+    
+    const s = size / 100;
+    ctx.scale(s, s);
+
+    const bob = (hanumanRotation !== 0) ? 0 : Math.sin(time * 0.002) * 2; // No bobbing when rotating/standing
+    ctx.translate(0, bob);
+
+    const tailWave = Math.sin(time * 0.003) * 5;
+    
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-35, 5);
+    ctx.quadraticCurveTo(-60, 5 + tailWave, -85, 7 + tailWave * 1.2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    
+    const tailGrad = ctx.createLinearGradient(-35, 0, -85, 5);
+    tailGrad.addColorStop(0, '#8B4513');
+    tailGrad.addColorStop(0.5, '#6B3410');
+    tailGrad.addColorStop(1, '#8B4513');
+    ctx.strokeStyle = tailGrad;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(-35, 3);
+    ctx.quadraticCurveTo(-60, 3 + tailWave, -85, 5 + tailWave * 1.2);
+    ctx.stroke();
+    
+    const tuftGrad = ctx.createRadialGradient(-85, 5 + tailWave * 1.2, 0, -85, 5 + tailWave * 1.2, 6);
+    tuftGrad.addColorStop(0, '#8B4513');
+    tuftGrad.addColorStop(0.7, '#654321');
+    tuftGrad.addColorStop(1, '#4a2a12');
+    ctx.fillStyle = tuftGrad;
+    ctx.beginPath();
+    ctx.ellipse(-85, 5 + tailWave * 1.2, 6, 4, 0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = '#CC7000';
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-8, -12);
+    ctx.lineTo(-30, -15);
+    ctx.lineTo(-48, -16);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-8, 14);
+    ctx.lineTo(-30, 17);
+    ctx.lineTo(-48, 18);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    
+    const legGrad1 = ctx.createLinearGradient(-8, -18, -8, -8);
+    legGrad1.addColorStop(0, '#CC7000');
+    legGrad1.addColorStop(0.4, '#FFA500');
+    legGrad1.addColorStop(0.6, '#FFB84D');
+    legGrad1.addColorStop(1, '#CC7000');
+    ctx.strokeStyle = legGrad1;
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(-8, -13);
+    ctx.lineTo(-30, -16);
+    ctx.lineTo(-48, -17);
+    ctx.stroke();
+    
+    const legGrad2 = ctx.createLinearGradient(-8, 8, -8, 18);
+    legGrad2.addColorStop(0, '#CC7000');
+    legGrad2.addColorStop(0.4, '#FFA500');
+    legGrad2.addColorStop(0.6, '#FFB84D');
+    legGrad2.addColorStop(1, '#CC7000');
+    ctx.strokeStyle = legGrad2;
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(-8, 13);
+    ctx.lineTo(-30, 16);
+    ctx.lineTo(-48, 17);
+    ctx.stroke();
+
+    const footGrad1 = ctx.createRadialGradient(-48, -17, 0, -48, -17, 9);
+    footGrad1.addColorStop(0, '#FFE4B5');
+    footGrad1.addColorStop(0.6, '#FFD4A3');
+    footGrad1.addColorStop(1, '#CCB088');
+    ctx.fillStyle = footGrad1;
+    ctx.beginPath();
+    ctx.ellipse(-48, -17, 9, 7, -0.1, 0, Math.PI*2);
+    ctx.fill();
+    
+    const footGrad2 = ctx.createRadialGradient(-48, 17, 0, -48, 17, 9);
+    footGrad2.addColorStop(0, '#FFE4B5');
+    footGrad2.addColorStop(0.6, '#FFD4A3');
+    footGrad2.addColorStop(1, '#CCB088');
+    ctx.fillStyle = footGrad2;
+    ctx.beginPath();
+    ctx.ellipse(-48, 17, 9, 7, 0.1, 0, Math.PI*2);
+    ctx.fill();
+
+    const ankletGrad1 = ctx.createRadialGradient(-47, -17, 0, -46, -16, 5);
+    ankletGrad1.addColorStop(0, '#FFED4E');
+    ankletGrad1.addColorStop(0.5, '#FFD700');
+    ankletGrad1.addColorStop(1, '#DAA520');
+    ctx.strokeStyle = ankletGrad1;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(-46, -16, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    const ankletGrad2 = ctx.createRadialGradient(-47, 17, 0, -46, 16, 5);
+    ankletGrad2.addColorStop(0, '#FFED4E');
+    ankletGrad2.addColorStop(0.5, '#FFD700');
+    ankletGrad2.addColorStop(1, '#DAA520');
+    ctx.strokeStyle = ankletGrad2;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(-46, 16, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.2;
+    const bodyShadow = ctx.createRadialGradient(0, 3, 0, 0, 3, 35);
+    bodyShadow.addColorStop(0, '#000');
+    bodyShadow.addColorStop(1, 'transparent');
+    ctx.fillStyle = bodyShadow;
+    ctx.beginPath();
+    ctx.ellipse(0, 3, 34, 24, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    const bodyGrad = ctx.createRadialGradient(-5, -5, 0, 0, 0, 35);
+    bodyGrad.addColorStop(0, '#FFD699');
+    bodyGrad.addColorStop(0.3, '#FFB84D');
+    bodyGrad.addColorStop(0.6, '#FFA500');
+    bodyGrad.addColorStop(0.85, '#CC7000');
+    bodyGrad.addColorStop(1, '#995500');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 32, 23, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    const highlightGrad = ctx.createRadialGradient(-8, -8, 0, -8, -8, 20);
+    highlightGrad.addColorStop(0, 'rgba(255, 235, 180, 0.6)');
+    highlightGrad.addColorStop(0.5, 'rgba(255, 235, 180, 0.2)');
+    highlightGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = highlightGrad;
+    ctx.beginPath();
+    ctx.ellipse(-5, -5, 18, 13, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    const redClothGrad = ctx.createLinearGradient(-20, -18, -6, 0);
+    redClothGrad.addColorStop(0, '#990000');
+    redClothGrad.addColorStop(0.4, '#CC0000');
+    redClothGrad.addColorStop(0.7, '#FF3333');
+    redClothGrad.addColorStop(1, '#CC0000');
+    ctx.fillStyle = redClothGrad;
+    ctx.beginPath();
+    ctx.moveTo(-10, -18);
+    ctx.quadraticCurveTo(-18, -10, -20, 0);
+    ctx.lineTo(-6, 0);
+    ctx.lineTo(-6, -13);
+    ctx.closePath();
+    ctx.fill();
+    
+    const greenClothGrad = ctx.createLinearGradient(-20, 18, -6, 0);
+    greenClothGrad.addColorStop(0, '#007700');
+    greenClothGrad.addColorStop(0.4, '#00AA00');
+    greenClothGrad.addColorStop(0.7, '#33CC33');
+    greenClothGrad.addColorStop(1, '#00AA00');
+    ctx.fillStyle = greenClothGrad;
+    ctx.beginPath();
+    ctx.moveTo(-10, 18);
+    ctx.quadraticCurveTo(-18, 10, -20, 0);
+    ctx.lineTo(-6, 0);
+    ctx.lineTo(-6, 13);
+    ctx.closePath();
+    ctx.fill();
+
+    const beltGrad = ctx.createRadialGradient(-6, -3, 0, -6, 0, 22);
+    beltGrad.addColorStop(0, '#FFED4E');
+    beltGrad.addColorStop(0.3, '#FFD700');
+    beltGrad.addColorStop(0.6, '#DAA520');
+    beltGrad.addColorStop(1, '#B8860B');
+    ctx.strokeStyle = beltGrad;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(-6, 0, 6, 20, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    const buckleGrad = ctx.createRadialGradient(-7, -1, 0, -6, 0, 6);
+    buckleGrad.addColorStop(0, '#FFED4E');
+    buckleGrad.addColorStop(0.5, '#FFD700');
+    buckleGrad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = buckleGrad;
+    ctx.beginPath();
+    ctx.arc(-6, 0, 6, 0, Math.PI*2);
+    ctx.fill();
+    
+    const gemGrad = ctx.createRadialGradient(-6.5, -0.5, 0, -6, 0, 3);
+    gemGrad.addColorStop(0, '#66FF66');
+    gemGrad.addColorStop(0.5, '#00AA00');
+    gemGrad.addColorStop(1, '#006600');
+    ctx.fillStyle = gemGrad;
+    ctx.beginPath();
+    ctx.arc(-6, 0, 3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#995500';
+    ctx.beginPath();
+    ctx.ellipse(38, 2, 19, 21, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    const headGrad = ctx.createRadialGradient(34, -4, 0, 38, 0, 22);
+    headGrad.addColorStop(0, '#FFD699');
+    headGrad.addColorStop(0.4, '#FFB84D');
+    headGrad.addColorStop(0.7, '#FFA500');
+    headGrad.addColorStop(1, '#CC7000');
+    ctx.fillStyle = headGrad;
+    ctx.beginPath();
+    ctx.ellipse(38, 0, 18, 20, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    const cheekGrad1 = ctx.createRadialGradient(33, -10, 0, 35, -10, 8);
+    cheekGrad1.addColorStop(0, '#FFB84D');
+    cheekGrad1.addColorStop(0.6, '#FF9500');
+    cheekGrad1.addColorStop(1, '#CC7000');
+    ctx.fillStyle = cheekGrad1;
+    ctx.beginPath();
+    ctx.ellipse(35, -10, 8, 6, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    
+    const cheekGrad2 = ctx.createRadialGradient(33, 10, 0, 35, 10, 8);
+    cheekGrad2.addColorStop(0, '#FFB84D');
+    cheekGrad2.addColorStop(0.6, '#FF9500');
+    cheekGrad2.addColorStop(1, '#CC7000');
+    ctx.fillStyle = cheekGrad2;
+    ctx.beginPath();
+    ctx.ellipse(35, 10, 8, 6, 0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#CCB088';
+    ctx.beginPath();
+    ctx.ellipse(49, 1, 14.5, 14.5, 0, -0.5, Math.PI + 0.5);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    const muzzleGrad = ctx.createRadialGradient(45, -2, 0, 48, 0, 15);
+    muzzleGrad.addColorStop(0, '#FFE4B5');
+    muzzleGrad.addColorStop(0.5, '#FFD4A3');
+    muzzleGrad.addColorStop(1, '#CCB088');
+    ctx.fillStyle = muzzleGrad;
+    ctx.beginPath();
+    ctx.ellipse(48, 0, 14, 14, 0, -0.5, Math.PI + 0.5);
+    ctx.fill();
+    
+    const innerMuzzleGrad = ctx.createRadialGradient(48, -1, 0, 50, 0, 11);
+    innerMuzzleGrad.addColorStop(0, '#FFF5E6');
+    innerMuzzleGrad.addColorStop(0.6, '#FFE4B5');
+    innerMuzzleGrad.addColorStop(1, '#FFD4A3');
+    ctx.fillStyle = innerMuzzleGrad;
+    ctx.beginPath();
+    ctx.ellipse(50, 0, 11, 11, 0, -0.4, Math.PI + 0.4);
+    ctx.fill();
+
+    const noseGrad = ctx.createRadialGradient(55, -1, 0, 56, 0, 4);
+    noseGrad.addColorStop(0, '#8B6F47');
+    noseGrad.addColorStop(0.6, '#654321');
+    noseGrad.addColorStop(1, '#3d2812');
+    ctx.fillStyle = noseGrad;
+    ctx.beginPath();
+    ctx.ellipse(56, -3, 3, 4, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(56, 3, 3, 4, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(52, 0, 8, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#CC7000';
+    ctx.beginPath();
+    ctx.ellipse(42, -10, 8.5, 9.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(42, 10, 8.5, 9.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    const eyeWhiteGrad1 = ctx.createRadialGradient(41, -11, 0, 42, -10, 8);
+    eyeWhiteGrad1.addColorStop(0, '#fff');
+    eyeWhiteGrad1.addColorStop(0.7, '#f5f5f5');
+    eyeWhiteGrad1.addColorStop(1, '#e8e8e8');
+    ctx.fillStyle = eyeWhiteGrad1;
+    ctx.beginPath();
+    ctx.ellipse(42, -10, 8, 9, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    const eyeWhiteGrad2 = ctx.createRadialGradient(41, 9, 0, 42, 10, 8);
+    eyeWhiteGrad2.addColorStop(0, '#fff');
+    eyeWhiteGrad2.addColorStop(0.7, '#f5f5f5');
+    eyeWhiteGrad2.addColorStop(1, '#e8e8e8');
+    ctx.fillStyle = eyeWhiteGrad2;
+    ctx.beginPath();
+    ctx.ellipse(42, 10, 8, 9, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    const pupilGrad1 = ctx.createRadialGradient(42, -10.5, 0, 43, -10, 4);
+    pupilGrad1.addColorStop(0, '#222');
+    pupilGrad1.addColorStop(0.6, '#000');
+    pupilGrad1.addColorStop(1, '#000');
+    ctx.fillStyle = pupilGrad1;
+    ctx.beginPath();
+    ctx.arc(43, -10, 4, 0, Math.PI*2);
+    ctx.fill();
+    
+    const pupilGrad2 = ctx.createRadialGradient(42, 9.5, 0, 43, 10, 4);
+    pupilGrad2.addColorStop(0, '#222');
+    pupilGrad2.addColorStop(0.6, '#000');
+    pupilGrad2.addColorStop(1, '#000');
+    ctx.fillStyle = pupilGrad2;
+    ctx.beginPath();
+    ctx.arc(43, 10, 4, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(41, -11.5, 2.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(41, 8.5, 2.5, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#B8860B';
+    ctx.beginPath();
+    ctx.ellipse(38, -19, 21, 7, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    const crownBaseGrad = ctx.createLinearGradient(34, -20, 42, -20);
+    crownBaseGrad.addColorStop(0, '#DAA520');
+    crownBaseGrad.addColorStop(0.3, '#FFED4E');
+    crownBaseGrad.addColorStop(0.5, '#FFD700');
+    crownBaseGrad.addColorStop(0.7, '#FFED4E');
+    crownBaseGrad.addColorStop(1, '#DAA520');
+    ctx.fillStyle = crownBaseGrad;
+    ctx.beginPath();
+    ctx.ellipse(38, -20, 20, 6, 0, Math.PI, 0);
+    ctx.fill();
+    
+    const spireGrad = ctx.createLinearGradient(27, -32, 27, -20);
+    spireGrad.addColorStop(0, '#FFED4E');
+    spireGrad.addColorStop(0.5, '#FFD700');
+    spireGrad.addColorStop(1, '#DAA520');
+    
+    ctx.fillStyle = spireGrad;
+    ctx.beginPath();
+    ctx.moveTo(25, -20);
+    ctx.lineTo(27, -32);
+    ctx.lineTo(29, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 237, 78, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(26, -20);
+    ctx.lineTo(27, -32);
+    ctx.lineTo(27.5, -20);
+    ctx.closePath();
+    ctx.fill();
+    
+    const centerSpireGrad = ctx.createLinearGradient(38, -42, 38, -20);
+    centerSpireGrad.addColorStop(0, '#FFED4E');
+    centerSpireGrad.addColorStop(0.5, '#FFD700');
+    centerSpireGrad.addColorStop(1, '#DAA520');
+    ctx.fillStyle = centerSpireGrad;
+    ctx.beginPath();
+    ctx.moveTo(36, -20);
+    ctx.lineTo(38, -42);
+    ctx.lineTo(40, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 237, 78, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(37, -20);
+    ctx.lineTo(38, -42);
+    ctx.lineTo(38.5, -20);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.fillStyle = spireGrad;
+    ctx.beginPath();
+    ctx.moveTo(47, -20);
+    ctx.lineTo(49, -32);
+    ctx.lineTo(51, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 237, 78, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(48, -20);
+    ctx.lineTo(49, -32);
+    ctx.lineTo(49.5, -20);
+    ctx.closePath();
+    ctx.fill();
+
+    const rubyGrad = ctx.createRadialGradient(37, -44, 0, 38, -42, 5);
+    rubyGrad.addColorStop(0, '#FF6B6B');
+    rubyGrad.addColorStop(0.4, '#E60000');
+    rubyGrad.addColorStop(0.7, '#CC0000');
+    rubyGrad.addColorStop(1, '#990000');
+    ctx.fillStyle = rubyGrad;
+    ctx.beginPath();
+    ctx.moveTo(38, -42);
+    ctx.lineTo(35, -45);
+    ctx.lineTo(38, -48);
+    ctx.lineTo(41, -45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 150, 150, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(38, -44);
+    ctx.lineTo(37, -45);
+    ctx.lineTo(38, -46);
+    ctx.closePath();
+    ctx.fill();
+
+    const emeraldGrad1 = ctx.createRadialGradient(26, -33, 0, 27, -32, 3);
+    emeraldGrad1.addColorStop(0, '#66FF66');
+    emeraldGrad1.addColorStop(0.5, '#00CC00');
+    emeraldGrad1.addColorStop(1, '#009900');
+    ctx.fillStyle = emeraldGrad1;
+    ctx.beginPath();
+    ctx.arc(27, -32, 3, 0, Math.PI*2);
+    ctx.fill();
+    
+    const emeraldGrad2 = ctx.createRadialGradient(48, -33, 0, 49, -32, 3);
+    emeraldGrad2.addColorStop(0, '#66FF66');
+    emeraldGrad2.addColorStop(0.5, '#00CC00');
+    emeraldGrad2.addColorStop(1, '#009900');
+    ctx.fillStyle = emeraldGrad2;
+    ctx.beginPath();
+    ctx.arc(49, -32, 3, 0, Math.PI*2);
+    ctx.fill();
+
+    const necklaceGrad = ctx.createRadialGradient(17, -1, 0, 18, 0, 18);
+    necklaceGrad.addColorStop(0, '#FFED4E');
+    necklaceGrad.addColorStop(0.5, '#FFD700');
+    necklaceGrad.addColorStop(1, '#B8860B');
+    ctx.strokeStyle = necklaceGrad;
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.arc(18, 0, 17, -0.7, 0.7);
+    ctx.stroke();
+    
+    const pendantGrad = ctx.createRadialGradient(7, -1, 0, 8, 0, 5);
+    pendantGrad.addColorStop(0, '#FFED4E');
+    pendantGrad.addColorStop(0.5, '#FFD700');
+    pendantGrad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = pendantGrad;
+    ctx.beginPath();
+    ctx.arc(8, 0, 5, 0, Math.PI*2);
+    ctx.fill();
+    
+    const pendantRuby = ctx.createRadialGradient(7.5, -0.5, 0, 8, 0, 2.5);
+    pendantRuby.addColorStop(0, '#FF6B6B');
+    pendantRuby.addColorStop(0.5, '#E60000');
+    pendantRuby.addColorStop(1, '#990000');
+    ctx.fillStyle = pendantRuby;
+    ctx.beginPath();
+    ctx.arc(8, 0, 2.5, 0, Math.PI*2);
+    ctx.fill();
+
+    // Arms and hands - different for namaskar pose
+    if (inNamaskar) {
+      // NAMASKAR POSE - Hands folded in prayer position in front of chest
+      
+      // Left arm (visible part from shoulder to prayer hands)
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = '#CC7000';
+      ctx.lineWidth = 11;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(15, -8);
+      ctx.lineTo(30, -5);
+      ctx.lineTo(42, 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      
+      const leftArmGrad = ctx.createLinearGradient(15, -8, 42, 0);
+      leftArmGrad.addColorStop(0, '#CC7000');
+      leftArmGrad.addColorStop(0.5, '#FFA500');
+      leftArmGrad.addColorStop(1, '#FFB84D');
+      ctx.strokeStyle = leftArmGrad;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(15, -8);
+      ctx.lineTo(30, -5);
+      ctx.lineTo(42, 0);
+      ctx.stroke();
+      
+      // Right arm (visible part from shoulder to prayer hands)
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = '#CC7000';
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(15, 8);
+      ctx.lineTo(30, 5);
+      ctx.lineTo(42, 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      
+      const rightArmGrad = ctx.createLinearGradient(15, 8, 42, 0);
+      rightArmGrad.addColorStop(0, '#CC7000');
+      rightArmGrad.addColorStop(0.5, '#FFA500');
+      rightArmGrad.addColorStop(1, '#FFB84D');
+      ctx.strokeStyle = rightArmGrad;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(15, 8);
+      ctx.lineTo(30, 5);
+      ctx.lineTo(42, 0);
+      ctx.stroke();
+      
+      // Prayer hands (folded together in front of chest)
+      const prayerHandGrad = ctx.createRadialGradient(40, -2, 0, 42, 0, 10);
+      prayerHandGrad.addColorStop(0, '#FFE4B5');
+      prayerHandGrad.addColorStop(0.6, '#FFD4A3');
+      prayerHandGrad.addColorStop(1, '#CCB088');
+      ctx.fillStyle = prayerHandGrad;
+      
+      // Left hand
+      ctx.beginPath();
+      ctx.ellipse(42, -5, 8, 12, 0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = '#CCB088';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Right hand (slightly overlapping)
+      ctx.beginPath();
+      ctx.ellipse(42, 5, 8, 12, -0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Fingers on prayer hands
+      for(let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#FFD4A3';
+        ctx.beginPath();
+        ctx.ellipse(46 + i*3, -8 + i*1.5, 2, 4, 0.3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(46 + i*3, 8 - i*1.5, 2, 4, -0.3, 0, Math.PI*2);
+        ctx.fill();
+      }
+      
+      // Armbands
+      const armband1Grad = ctx.createRadialGradient(27, -6, 0, 28, -6, 6);
+      armband1Grad.addColorStop(0, '#FFED4E');
+      armband1Grad.addColorStop(0.5, '#FFD700');
+      armband1Grad.addColorStop(1, '#B8860B');
+      ctx.strokeStyle = armband1Grad;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(28, -6, 6, 5, -0.1, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      const armband2Grad = ctx.createRadialGradient(27, 6, 0, 28, 6, 6);
+      armband2Grad.addColorStop(0, '#FFED4E');
+      armband2Grad.addColorStop(0.5, '#FFD700');
+      armband2Grad.addColorStop(1, '#B8860B');
+      ctx.strokeStyle = armband2Grad;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(28, 6, 6, 5, 0.1, 0, Math.PI * 2);
+      ctx.stroke();
+      
+    } else {
+      // NORMAL HORIZONTAL ARMS (flying pose)
+      
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = '#CC7000';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(15, -11);
+      ctx.lineTo(40, -17);
+      ctx.lineTo(62, -21);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(15, 13);
+      ctx.lineTo(40, 17);
+      ctx.lineTo(60, 19);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      
+      const armGrad1 = ctx.createLinearGradient(15, -17, 15, -7);
+      armGrad1.addColorStop(0, '#CC7000');
+      armGrad1.addColorStop(0.3, '#FFA500');
+      armGrad1.addColorStop(0.6, '#FFB84D');
+      armGrad1.addColorStop(1, '#CC7000');
+      ctx.strokeStyle = armGrad1;
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(15, -12);
+      ctx.lineTo(40, -18);
+      ctx.lineTo(62, -22);
+      ctx.stroke();
+      
+      const armGrad2 = ctx.createLinearGradient(15, 7, 15, 17);
+      armGrad2.addColorStop(0, '#CC7000');
+      armGrad2.addColorStop(0.3, '#FFA500');
+      armGrad2.addColorStop(0.6, '#FFB84D');
+      armGrad2.addColorStop(1, '#CC7000');
+      ctx.strokeStyle = armGrad2;
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(15, 12);
+      ctx.lineTo(40, 16);
+      ctx.lineTo(60, 18);
+      ctx.stroke();
+
+      const handGrad1 = ctx.createRadialGradient(61, -23, 0, 62, -22, 8);
+      handGrad1.addColorStop(0, '#FFE4B5');
+      handGrad1.addColorStop(0.6, '#FFD4A3');
+      handGrad1.addColorStop(1, '#CCB088');
+      ctx.fillStyle = handGrad1;
+      ctx.beginPath();
+      ctx.ellipse(62, -22, 8, 7, -0.1, 0, Math.PI*2);
+      ctx.fill();
+      
+      const handGrad2 = ctx.createRadialGradient(59, 17, 0, 60, 18, 8);
+      handGrad2.addColorStop(0, '#FFE4B5');
+      handGrad2.addColorStop(0.6, '#FFD4A3');
+      handGrad2.addColorStop(1, '#CCB088');
+      ctx.fillStyle = handGrad2;
+      ctx.beginPath();
+      ctx.ellipse(60, 18, 8, 7, 0.1, 0, Math.PI*2);
+      ctx.fill();
+
+      for(let i = 0; i < 3; i++) {
+        const fingerGrad1 = ctx.createRadialGradient(64 + i*2, -23 + i, 0, 64 + i*2, -23 + i, 2);
+        fingerGrad1.addColorStop(0, '#FFE4B5');
+        fingerGrad1.addColorStop(0.6, '#FFD4A3');
+        fingerGrad1.addColorStop(1, '#CCB088');
+        ctx.fillStyle = fingerGrad1;
+        ctx.beginPath();
+        ctx.arc(64 + i*2, -23 + i, 2, 0, Math.PI*2);
+        ctx.fill();
+        
+        const fingerGrad2 = ctx.createRadialGradient(62 + i*2, 19 + i, 0, 62 + i*2, 19 + i, 2);
+        fingerGrad2.addColorStop(0, '#FFE4B5');
+        fingerGrad2.addColorStop(0.6, '#FFD4A3');
+        fingerGrad2.addColorStop(1, '#CCB088');
+        ctx.fillStyle = fingerGrad2;
+        ctx.beginPath();
+        ctx.arc(62 + i*2, 19 + i, 2, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      const armband1Grad = ctx.createRadialGradient(27, -16, 0, 28, -15, 7);
+      armband1Grad.addColorStop(0, '#FFED4E');
+      armband1Grad.addColorStop(0.5, '#FFD700');
+      armband1Grad.addColorStop(1, '#B8860B');
+      ctx.strokeStyle = armband1Grad;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(28, -15, 7, 5, -0.2, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      const armband2Grad = ctx.createRadialGradient(27, 13, 0, 28, 14, 7);
+      armband2Grad.addColorStop(0, '#FFED4E');
+      armband2Grad.addColorStop(0.5, '#FFD700');
+      armband2Grad.addColorStop(1, '#B8860B');
+      ctx.strokeStyle = armband2Grad;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(28, 14, 7, 5, 0.2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawGada(x, y, isFlaming=false) {
+    ctx.save();
+    if (isFlaming) {
+      ctx.globalCompositeOperation = 'lighter';
+      const flameGrad = ctx.createRadialGradient(x, y, 3, x, y, 28);
+      flameGrad.addColorStop(0, 'rgba(255,255,200,0.6)');
+      flameGrad.addColorStop(0.3, 'rgba(255,180,60,0.4)');
+      flameGrad.addColorStop(0.6, 'rgba(255,100,30,0.2)');
+      flameGrad.addColorStop(1, 'rgba(255,60,0,0)');
+      ctx.fillStyle = flameGrad;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 28, 28, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    
+    const gadaGrad = ctx.createRadialGradient(x-5, y-5, 2, x, y, 16);
+    gadaGrad.addColorStop(0, '#FFE55C');
+    gadaGrad.addColorStop(0.4, '#FFD700');
+    gadaGrad.addColorStop(0.7, '#DAA520');
+    gadaGrad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = gadaGrad;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 16, 16, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#6B5A3D';
+    ctx.strokeStyle = '#4A3D28';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const sx = x + Math.cos(angle) * 12;
+      const sy = y + Math.sin(angle) * 12;
+      const ex = x + Math.cos(angle) * 20;
+      const ey = y + Math.sin(angle) * 20;
+      
+      ctx.beginPath();
+      ctx.moveTo(sx - Math.sin(angle) * 2, sy + Math.cos(angle) * 2);
+      ctx.lineTo(ex, ey);
+      ctx.lineTo(sx + Math.sin(angle) * 2, sy - Math.cos(angle) * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    
+    const handleGrad = ctx.createLinearGradient(x-5, y+12, x+5, y+42);
+    handleGrad.addColorStop(0, '#8B6F47');
+    handleGrad.addColorStop(0.5, '#6B5530');
+    handleGrad.addColorStop(1, '#8B6F47');
+    ctx.fillStyle = handleGrad;
+    ctx.fillRect(x-5, y+12, 10, 30);
+    
+    ctx.strokeStyle = '#4A3D28';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x-5, y + 14 + i * 5);
+      ctx.lineTo(x+5, y + 14 + i * 5);
+      ctx.stroke();
+    }
+    
+    ctx.fillStyle = '#B8860B';
+    ctx.beginPath();
+    ctx.ellipse(x, y+42, 6, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  function drawRakshaSprite(r, time) {
+    ctx.save();
+    
+    let screenY;
+    let bodyBob = 0;
+    let legSwing = 0;
+    let armSwing = 0;
+    
+    if (r.isFlying) {
+      screenY = screenH * r.y;
+      const waveY = Math.sin(r.waveOffset + time * 0.002) * 15;
+      ctx.translate(r.x, screenY + waveY);
+      bodyBob = Math.sin(r.runCycle) * 3;
+      ctx.translate(0, bodyBob);
+    } else {
+      screenY = r.y;
+      ctx.translate(r.x, r.y);
+      
+      r.runCycle += 0.15;
+      legSwing = Math.sin(r.runCycle) * 0.4;
+      armSwing = Math.sin(r.runCycle + Math.PI) * 0.3;
+      bodyBob = Math.abs(Math.sin(r.runCycle * 2)) * 4;
+      ctx.translate(0, -bodyBob);
+    }
+    
+    ctx.scale(r.w/64, r.h/64);
+    
+    if (!r.isFlying) {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(0, 75 + bodyBob, 30, 8, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    
+    if (r.isFlying) {
+      r.runCycle += 0.1;
+      const wingFlap = Math.sin(time * 0.008 + r.waveOffset) * 0.3;
+      
+      ctx.fillStyle = '#4a1a1a';
+      ctx.beginPath();
+      ctx.moveTo(-18, -10);
+      ctx.quadraticCurveTo(-35 - wingFlap * 10, -15, -42, -5 + wingFlap * 15);
+      ctx.quadraticCurveTo(-35, 5, -18, 0);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.moveTo(18, -10);
+      ctx.quadraticCurveTo(35 + wingFlap * 10, -15, 42, -5 + wingFlap * 15);
+      ctx.quadraticCurveTo(35, 5, 18, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    if (!r.isFlying) {
+      ctx.save();
+      ctx.translate(-8, 20);
+      ctx.rotate(legSwing);
+      ctx.strokeStyle = '#5a1f1f';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 32);
+      ctx.stroke();
+      ctx.fillStyle = '#4a1515';
+      ctx.beginPath();
+      ctx.ellipse(0, 32, 10, 6, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    
+    ctx.fillStyle = '#7a2828';
+    ctx.beginPath();
+    ctx.ellipse(0, -8, 22, 32, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#5a1a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(-8, -15, 10, 0.3, 2.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(8, -15, 10, 0.6, 2.8);
+    ctx.stroke();
+    
+    if (!r.isFlying) {
+      ctx.save();
+      ctx.translate(-18, -16);
+      ctx.rotate(-armSwing);
+      ctx.strokeStyle = '#7a2828';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-18, 14);
+      ctx.stroke();
+      ctx.fillStyle = '#6a2020';
+      ctx.beginPath();
+      ctx.arc(-18, 14, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.translate(-18, -16);
+      ctx.rotate(-0.2);
+      ctx.strokeStyle = '#7a2828';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-22, 8);
+      ctx.stroke();
+      ctx.fillStyle = '#6a2020';
+      ctx.beginPath();
+      ctx.arc(-22, 8, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    
+    ctx.fillStyle = '#8a3030';
+    ctx.beginPath();
+    ctx.ellipse(0, -38, 18, 20, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#2a0a0a';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-14, -48);
+    ctx.quadraticCurveTo(-22, -54, -20, -62);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(14, -48);
+    ctx.quadraticCurveTo(22, -54, 20, -62);
+    ctx.stroke();
+    
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.ellipse(-7, -42, 5, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(7, -42, 5, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-7, -42, 2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7, -42, 2, 0, Math.PI*2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#2a0a0a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-14, -48);
+    ctx.lineTo(-4, -46);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(14, -48);
+    ctx.lineTo(4, -46);
+    ctx.stroke();
+    
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(-8, -32);
+    ctx.lineTo(-10, -24);
+    ctx.lineTo(-6, -28);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(8, -32);
+    ctx.lineTo(10, -24);
+    ctx.lineTo(6, -28);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.strokeStyle = '#2a0a0a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -30, 10, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+    
+    ctx.save();
+    ctx.translate(20, -20);
+    ctx.rotate(0.4 + armSwing * 0.5);
+    ctx.fillStyle = '#c0c0c0';
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-3, 0);
+    ctx.lineTo(-2, -35);
+    ctx.lineTo(0, -40);
+    ctx.lineTo(2, -35);
+    ctx.lineTo(3, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(-2, 0, 4, 12);
+    ctx.fillStyle = '#8a6040';
+    ctx.fillRect(-8, -2, 16, 4);
+    ctx.restore();
+    
+    if (!r.isFlying) {
+      ctx.save();
+      ctx.translate(18, -16);
+      ctx.rotate(armSwing);
+      ctx.strokeStyle = '#7a2828';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(18, 14);
+      ctx.stroke();
+      ctx.fillStyle = '#6a2020';
+      ctx.beginPath();
+      ctx.arc(18, 14, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.translate(18, -16);
+      ctx.rotate(0.2);
+      ctx.strokeStyle = '#7a2828';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(22, 8);
+      ctx.stroke();
+      ctx.fillStyle = '#6a2020';
+      ctx.beginPath();
+      ctx.arc(22, 8, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    
+    if (!r.isFlying) {
+      ctx.save();
+      ctx.translate(8, 20);
+      ctx.rotate(-legSwing);
+      ctx.strokeStyle = '#5a1f1f';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 32);
+      ctx.stroke();
+      ctx.fillStyle = '#4a1515';
+      ctx.beginPath();
+      ctx.ellipse(0, 32, 10, 6, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    
+    ctx.restore();
+  }
+
+  function drawBoss(b) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    
+    // Force boss type to be an integer
+    const bossType = parseInt(b.type);
+    
+    // Draw based on boss type - using if-else for reliability
+    if (bossType === 0) {
+      console.log('💜 Drawing Type 0: Akampana');
+      // Akampana - Thin, tall, snake-like
+      ctx.fillStyle = '#3a1235';
+      ctx.beginPath();
+      ctx.ellipse(0, -90, 25, 60, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#5b2f4a';
+      ctx.beginPath();
+      ctx.ellipse(0, -140, 35, 40, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#4a1f3a';
+      ctx.beginPath();
+      ctx.moveTo(-50, -135);
+      ctx.quadraticCurveTo(-60, -145, -55, -155);
+      ctx.lineTo(0, -140);
+      ctx.lineTo(55, -155);
+      ctx.quadraticCurveTo(60, -145, 50, -135);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-15, -170);
+      ctx.bezierCurveTo(-25, -185, -20, -200, -10, -210);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(15, -170);
+      ctx.bezierCurveTo(25, -185, 20, -200, 10, -210);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(-12, -145, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(12, -145, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, -155, 6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+    } else if (bossType === 1) {
+      console.log('🔴 Drawing Type 1: Prahasta');
+      // Prahasta - Massive, muscular, brutish
+      ctx.fillStyle = '#541225';
+      ctx.beginPath();
+      ctx.ellipse(0, -70, 70, 50, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#5a1a1a';
+      ctx.fillRect(-25, -110, 50, 40);
+      
+      ctx.fillStyle = '#6b1f2a';
+      ctx.fillRect(-40, -150, 80, 50);
+      ctx.fillRect(-35, -160, 70, 15);
+      
+      ctx.fillStyle = '#ff0000';
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(-20, -135, 4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(20, -135, 4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(-25, -115);
+      ctx.lineTo(-28, -95);
+      ctx.lineTo(-22, -110);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(25, -115);
+      ctx.lineTo(28, -95);
+      ctx.lineTo(22, -110);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(-35, -160);
+      ctx.lineTo(-45, -175);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(35, -160);
+      ctx.lineTo(45, -175);
+      ctx.stroke();
+      
+    } else if (bossType === 2) {
+      console.log('🟢 Drawing Type 2: Virupaksha');
+      // Virupaksha - Four arms, elegant but deadly
+      ctx.fillStyle = '#454512';
+      ctx.beginPath();
+      ctx.ellipse(0, -85, 35, 55, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      const armY = [-95, -85, -75, -65];
+      for(let i = 0; i < 4; i++) {
+        ctx.strokeStyle = '#5a5a1a';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(-35, armY[i]);
+        ctx.lineTo(-70, armY[i] + 20);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(35, armY[i]);
+        ctx.lineTo(70, armY[i] + 20);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#6a6a2a';
+        ctx.beginPath();
+        ctx.arc(-70, armY[i] + 20, 6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(70, armY[i] + 20, 6, 0, Math.PI*2);
+        ctx.fill();
+      }
+      
+      ctx.fillStyle = '#6b6f2a';
+      ctx.beginPath();
+      ctx.ellipse(0, -135, 30, 45, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-12, -175);
+      ctx.bezierCurveTo(-18, -195, -15, -210, -8, -220);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(12, -175);
+      ctx.bezierCurveTo(18, -195, 15, -210, 8, -220);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#00ff00';
+      ctx.shadowColor = '#00ff00';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(-15, -140, 8, 4, -0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(15, -140, 8, 4, 0.3, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+    } else if (bossType === 3) {
+      console.log('🔵 Drawing Type 3: Mahodara');
+      // Mahodara - Fat, round, belly-centered
+      ctx.fillStyle = '#124545';
+      ctx.beginPath();
+      ctx.ellipse(0, -60, 75, 65, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#0a2a2a';
+      ctx.beginPath();
+      ctx.arc(0, -55, 8, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#2a6f6b';
+      ctx.beginPath();
+      ctx.ellipse(0, -130, 28, 32, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-18, -155);
+      ctx.quadraticCurveTo(-22, -165, -20, -172);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(18, -155);
+      ctx.quadraticCurveTo(22, -165, 20, -172);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -125, 15, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#00ffff';
+      ctx.shadowColor = '#00ffff';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(-12, -140, 6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(12, -140, 6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+    } else if (bossType === 4) {
+      console.log('🟠 Drawing Type 4: Atikaya');
+      // Atikaya - Giant, sleeping giant appearance
+      ctx.fillStyle = '#451212';
+      ctx.beginPath();
+      ctx.ellipse(0, -75, 80, 60, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#5a1a1a';
+      ctx.lineWidth = 18;
+      ctx.beginPath();
+      ctx.moveTo(-80, -80);
+      ctx.lineTo(-110, -60);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(80, -80);
+      ctx.lineTo(110, -60);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#6b2a2a';
+      ctx.beginPath();
+      ctx.ellipse(0, -135, 45, 48, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#4a1a1a';
+      ctx.fillRect(-40, -155, 80, 12);
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.arc(-35, -150, 15, Math.PI, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(35, -150, 15, Math.PI, 0);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#ff6600';
+      ctx.shadowColor = '#ff6600';
+      ctx.shadowBlur = 8;
+      ctx.fillRect(-20, -145, 10, 4);
+      ctx.fillRect(10, -145, 10, 4);
+      ctx.shadowBlur = 0;
+      
+    } else if (bossType === 5) {
+      console.log('⚫ Drawing Type 5: Mahaparsva');
+      // Mahaparsva - Armored, veteran warrior
+      ctx.fillStyle = '#121245';
+      ctx.beginPath();
+      ctx.ellipse(0, -80, 50, 55, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#4a4aaa';
+      ctx.lineWidth = 4;
+      for(let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.arc(0, -100 + i * 12, 35, 0, Math.PI);
+        ctx.stroke();
+      }
+      
+      ctx.fillStyle = '#2a2a6b';
+      ctx.beginPath();
+      ctx.ellipse(0, -130, 35, 38, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#1a1a4a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-25, -150);
+      ctx.lineTo(15, -125);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(-30, -160);
+      ctx.lineTo(-40, -185);
+      ctx.lineTo(-38, -195);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(30, -160);
+      ctx.lineTo(40, -185);
+      ctx.lineTo(38, -195);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#0000ff';
+      ctx.shadowColor = '#0000ff';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(10, -135, 8, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath();
+      ctx.ellipse(-12, -135, 12, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+    } else if (bossType === 6) {
+      console.log('🟣 Drawing Type 6: Meghnath');
+      // Meghnath - Young, agile, magical - FINAL BOSS with special capture ability
+      ctx.fillStyle = '#451245';
+      ctx.beginPath();
+      ctx.ellipse(0, -90, 32, 52, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#ff00ff';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      for(let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(0, -90, 35 + i * 8, 0, Math.PI*2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      
+      ctx.fillStyle = '#6b2a6f';
+      ctx.beginPath();
+      ctx.ellipse(0, -135, 30, 35, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      ctx.moveTo(-25, -160);
+      ctx.lineTo(-20, -175);
+      ctx.lineTo(0, -180);
+      ctx.lineTo(20, -175);
+      ctx.lineTo(25, -160);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = '#ff00ff';
+      ctx.shadowColor = '#ff00ff';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(0, -178, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+      ctx.strokeStyle = '#1a0505';
+      ctx.lineWidth = 3;
+      for(let side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.moveTo(side * 15, -170);
+        ctx.lineTo(side * 25, -190);
+        ctx.moveTo(side * 20, -180);
+        ctx.lineTo(side * 30, -185);
+        ctx.moveTo(side * 22, -185);
+        ctx.lineTo(side * 32, -195);
+        ctx.stroke();
+      }
+      
+      ctx.fillStyle = '#ff00ff';
+      ctx.shadowColor = '#ff00ff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(-12, -140, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(12, -140, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      
+    } else {
+      // Fallback
+      console.error('❌ UNKNOWN BOSS TYPE:', bossType, 'Boss:', b.name);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(-50, -150, 100, 150);
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('ERROR', 0, -75);
+    }
+    
+    ctx.restore();
+
+    // HP bar
+    const barW = 200;
+    const x = (b.x - barW/2);
+    const y = b.y - b.h - 20;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(x-4, y-6, barW+8, 20);
+    
+    const hpGrad = ctx.createLinearGradient(x, y, x + barW * (b.hp / b.maxHp), y);
+    hpGrad.addColorStop(0, '#ff0000');
+    hpGrad.addColorStop(0.5, '#cc0000');
+    hpGrad.addColorStop(1, '#880000');
+    ctx.fillStyle = hpGrad;
+    ctx.fillRect(x, y, barW * (b.hp / b.maxHp), 10);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${b.name} HP: ${b.hp}/${b.maxHp}`, b.x, y - 8);
+    
+    // Debug: Show boss type and level
+    ctx.fillStyle = '#ffaa00';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(`[Type:${parseInt(b.type)} Lvl:${b.level}]`, b.x, y - 20);
+  }
+
+  function drawTree(tr, time) {
+    ctx.save();
+    
+    ctx.fillStyle = tr.burned ? '#0a0a0a' : '#5d4037';
+    ctx.fillRect(tr.x - 8, tr.y - tr.trunkH, 16, tr.trunkH);
+    
+    ctx.strokeStyle = tr.burned ? '#050505' : '#4a2f27';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(tr.x - 7, tr.y - tr.trunkH + 10 + i * 18);
+      ctx.lineTo(tr.x + 6, tr.y - tr.trunkH + 13 + i * 18);
+      ctx.stroke();
+    }
+    
+    if (!tr.burned) {
+      ctx.fillStyle = '#2d5016';
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y - tr.trunkH, tr.crownR, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#3a6018';
+      ctx.beginPath();
+      ctx.arc(tr.x - 18, tr.y - tr.trunkH - 8, tr.crownR * 0.6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(tr.x + 18, tr.y - tr.trunkH - 8, tr.crownR * 0.6, 0, Math.PI*2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#4a7020';
+      ctx.beginPath();
+      ctx.arc(tr.x - 10, tr.y - tr.trunkH - 15, tr.crownR * 0.4, 0, Math.PI*2);
+      ctx.fill();
+      
+      tr.fruits.forEach(fruit => {
+        const fx = tr.x + fruit.x;
+        const fy = tr.y - tr.trunkH + fruit.y;
+        
+        if (tr.fruitType === 'banana') {
+          ctx.fillStyle = '#FFD700';
+          ctx.beginPath();
+          ctx.ellipse(fx, fy, 4, 8, 0.3, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = '#FFA500';
+          ctx.beginPath();
+          ctx.ellipse(fx-2, fy+2, 3, 7, 0.2, 0, Math.PI*2);
+          ctx.fill();
+        } else if (tr.fruitType === 'orange') {
+          ctx.fillStyle = '#FF8C00';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 5, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = '#FFA500';
+          ctx.beginPath();
+          ctx.arc(fx-1, fy-1, 2, 0, Math.PI*2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = '#FFB347';
+          ctx.beginPath();
+          ctx.ellipse(fx, fy, 5, 6, 0.2, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = '#FF8C00';
+          ctx.beginPath();
+          ctx.ellipse(fx+1, fy, 3, 4, 0.2, 0, Math.PI*2);
+          ctx.fill();
+        }
+      });
+    } else {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y - tr.trunkH, tr.crownR * 0.8, 0, Math.PI*2);
+      ctx.fill();
+    }
+    
+    if (tr.burned) {
+      if (!tr.fireParticles) tr.fireParticles = [];
+      
+      if (tr.fireParticles.length < 30 && Math.random() < 0.5) {
+        tr.fireParticles.push({
+          x: rand(-tr.crownR * 0.7, tr.crownR * 0.7),
+          y: rand(-5, 5),
+          life: rand(0.6, 1.5),
+          maxLife: rand(0.6, 1.5),
+          size: rand(4, 12),
+          vx: rand(-15, 15),
+          vy: rand(-60, -100)
+        });
+      }
+      
+      for (let i = tr.fireParticles.length - 1; i >= 0; i--) {
+        const fp = tr.fireParticles[i];
+        fp.life -= 0.02;
+        fp.x += fp.vx * 0.016;
+        fp.y += fp.vy * 0.016;
+        fp.vy += 80 * 0.016;
+        fp.vx *= 0.98;
+        
+        if (fp.life <= 0) {
+          tr.fireParticles.splice(i, 1);
+          continue;
+        }
+        
+        const baseX = tr.x;
+        const baseY = tr.y - tr.trunkH;
+        
+        const lifeRatio = fp.life / fp.maxLife;
+        ctx.globalAlpha = lifeRatio * 0.9;
+        
+        const flameGrad = ctx.createRadialGradient(
+          baseX + fp.x, baseY + fp.y, 0,
+          baseX + fp.x, baseY + fp.y, fp.size * 1.2
+        );
+        
+        if (lifeRatio > 0.8) {
+          flameGrad.addColorStop(0, '#FFFFFF');
+          flameGrad.addColorStop(0.2, '#FFFF99');
+          flameGrad.addColorStop(0.5, '#FFCC00');
+          flameGrad.addColorStop(0.8, '#FF6600');
+          flameGrad.addColorStop(1, '#CC0000');
+        } else if (lifeRatio > 0.5) {
+          flameGrad.addColorStop(0, '#FFFF66');
+          flameGrad.addColorStop(0.3, '#FFAA00');
+          flameGrad.addColorStop(0.7, '#FF4400');
+          flameGrad.addColorStop(1, '#AA0000');
+        } else {
+          flameGrad.addColorStop(0, '#FFAA00');
+          flameGrad.addColorStop(0.4, '#FF3300');
+          flameGrad.addColorStop(0.8, '#990000');
+          flameGrad.addColorStop(1, 'rgba(100,0,0,0)');
+        }
+        
+        ctx.fillStyle = flameGrad;
+        
+        ctx.beginPath();
+        ctx.ellipse(
+          baseX + fp.x,
+          baseY + fp.y,
+          fp.size * (0.8 + Math.random() * 0.4),
+          fp.size * (1 + Math.random() * 0.5),
+          Math.random() * 0.5,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        
+        ctx.globalAlpha = 1;
+      }
+      
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.shadowColor = '#FF6600';
+      ctx.shadowBlur = 30;
+      const fireGlow = ctx.createRadialGradient(
+        tr.x, tr.y - tr.trunkH,
+        tr.crownR * 0.3,
+        tr.x, tr.y - tr.trunkH,
+        tr.crownR + 20
+      );
+      fireGlow.addColorStop(0, 'rgba(255,255,150,0.6)');
+      fireGlow.addColorStop(0.3, 'rgba(255,150,0,0.4)');
+      fireGlow.addColorStop(0.6, 'rgba(255,50,0,0.2)');
+      fireGlow.addColorStop(1, 'rgba(150,0,0,0)');
+      ctx.fillStyle = fireGlow;
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y - tr.trunkH, tr.crownR + 20, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'source-over';
+      
+      if (Math.random() < 0.2) {
+        spawnParticles(
+          tr.x + rand(-20, 20),
+          tr.y - tr.trunkH - 30,
+          1,
+          ['rgba(60,60,60,0.7)', 'rgba(80,80,80,0.6)', 'rgba(100,100,100,0.5)'],
+          20
+        );
+      }
+    }
+    
+    ctx.restore();
+  }
+
+  // Draw weapon projectile
+  function drawWeapon(w) {
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    
+    if (w.type === 'arrow') {
+      // Arrow
+      ctx.rotate(w.angle);
+      
+      // Arrowhead
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(0, 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Shaft
+      ctx.strokeStyle = '#8B6F47';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(-18, 0);
+      ctx.stroke();
+      
+      // Fletching
+      ctx.fillStyle = '#CC0000';
+      ctx.beginPath();
+      ctx.moveTo(-18, -3);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-18, 3);
+      ctx.closePath();
+      ctx.fill();
+      
+    } else if (w.type === 'dagger') {
+      // Dagger - spins as it flies
+      ctx.rotate(w.rotation);
+      
+      // Blade
+      ctx.fillStyle = '#c0c0c0';
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(3, -2);
+      ctx.lineTo(3, 2);
+      ctx.lineTo(0, 12);
+      ctx.lineTo(-3, 2);
+      ctx.lineTo(-3, -2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // Handle
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(-2, -2, 4, 8);
+      
+      // Pommel
+      ctx.fillStyle = '#8a6040';
+      ctx.beginPath();
+      ctx.arc(0, 6, 3, 0, Math.PI*2);
+      ctx.fill();
+      
+    } else {
+      // Sword
+      ctx.rotate(w.angle);
+      ctx.fillStyle = '#c0c0c0';
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(-1, -25);
+      ctx.lineTo(0, -28);
+      ctx.lineTo(1, -25);
+      ctx.lineTo(2, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // Handle
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(-1.5, 0, 3, 8);
+      
+      // Guard
+      ctx.fillStyle = '#8a6040';
+      ctx.fillRect(-6, -1, 12, 2);
+    }
+    
+    ctx.restore();
+  }
+
+  function showGameOver() {
+    gameCompleted = true;
+    running = false;
+    finalScoreEl.textContent = score;
+    gameOverEl.classList.add('show');
+    
+    if (score > high) {
+      high = score;
+      localStorage.setItem('vatika_high', String(high));
+      highEl.textContent = high;
+    }
+  }
+
+  function loop(now) {
+    if (!running) return;
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    const rect = canvas.getBoundingClientRect();
+    if (Math.abs(rect.width - screenW) > 1 || Math.abs(rect.height - screenH) > 1) { 
+      resizeCanvas(); 
+    }
+
+    ctx.clearRect(0, 0, screenW, screenH);
+
+    accumulated += dt * CONFIG.baseSpeed;
+    drawParallaxBackground(accumulated);
+
+    ctx.fillStyle = '#4c8b2f';
+    ctx.fillRect(0, screenH * 0.8, screenW, screenH * 0.2);
+
+    accRaksha += dt * 1000;
+    accTree += dt * 1000;
+    if (accRaksha >= CONFIG.rakshaIntervalMs) { 
+      accRaksha = 0; 
+      spawnRaksha(); 
+    }
+    if (accTree >= CONFIG.treeIntervalMs) { 
+      accTree = 0; 
+      spawnTree(); 
+    }
+
+    for (let i = trees.length - 1; i >= 0; i--) {
+      const tr = trees[i];
+      tr.x -= (CONFIG.baseSpeed * 0.8) * dt;
+      
+      const px = screenW * player.xPct;
+      
+      if (!tr.burned && !tr.passedBy && px > tr.x + 50) {
+        tr.passedBy = true;
+        tr.burned = true;
+        score += 10;
+        playSound('tree_burn');
+        spawnParticles(tr.x, tr.y - tr.trunkH, 25, ['#ff6b00', '#ffd166', '#ff8c00', '#fff'], 180);
+      }
+      
+      if (tr.x < -160) {
+        trees.splice(i, 1);
+      } else {
+        drawTree(tr, now);
+      }
+    }
+
+    for (let i = rakshas.length - 1; i >= 0; i--) {
+      const r = rakshas[i];
+      r.x += r.speed * dt * -1;
+      
+      // Raksha throws weapon
+      r.throwCooldown -= dt;
+      if (r.throwCooldown <= 0 && Math.random() < CONFIG.weaponThrowChance && r.x < screenW - 100) {
+        const ry = r.isFlying ? screenH * r.y : r.y;
+        const px = screenW * player.xPct;
+        const py = screenH * player.y;
+        
+        const dx = px - r.x;
+        const dy = py - ry;
+        const angle = Math.atan2(dy, dx);
+        
+        // Randomly choose weapon type: arrow, dagger, or sword
+        const weaponTypes = ['arrow', 'dagger', 'sword'];
+        const weaponType = weaponTypes[Math.floor(Math.random() * weaponTypes.length)];
+        
+        weapons.push({
+          x: r.x,
+          y: ry - 30,
+          vx: Math.cos(angle) * 350,
+          vy: Math.sin(angle) * 350,
+          angle: angle,
+          type: weaponType,
+          rotation: 0 // for spinning daggers
+        });
+        
+        playSound('weapon_throw');
+        r.throwCooldown = rand(2, 5); // cooldown between throws
+      }
+      
+      if (r.x < -120) { 
+        rakshas.splice(i, 1); 
+      } else {
+        drawRakshaSprite(r, now);
+      }
+    }
+
+    // Update and draw weapons
+    for (let i = weapons.length - 1; i >= 0; i--) {
+      const w = weapons[i];
+      w.x += w.vx * dt;
+      w.y += w.vy * dt;
+      
+      // Update angle for arrows/swords, rotation for daggers
+      if (w.type === 'dagger') {
+        w.rotation += 12 * dt; // Spin the dagger
+      } else {
+        w.angle = Math.atan2(w.vy, w.vx);
+      }
+      
+      // Remove off-screen weapons
+      if (w.x < -50 || w.x > screenW + 50 || w.y < -50 || w.y > screenH + 50) {
+        weapons.splice(i, 1);
+      } else {
+        drawWeapon(w);
+        
+        // Weapons pass through Hanuman (ineffective) - visual effect only
+        const px = screenW * player.xPct;
+        const py = screenH * player.y;
+        if (Math.abs(w.x - px) < 30 && Math.abs(w.y - py) < 30) {
+          // Small spark effect to show weapon passed through
+          spawnParticles(w.x, w.y, 3, ['#fff', '#ffaa00'], 100);
+        }
+      }
+    }
+
+    if (boss) {
+      boss.x += boss.speed * dt;
+      if (boss.x < screenW * 0.4) boss.speed = 0;
+      drawBoss(boss);
+      
+      // Draw Meghnath's bow during Brahmastra capture
+      if (captureSequenceActive && capturePhase === 0 && level === CONFIG.maxLevel) {
+        ctx.save();
+        ctx.translate(boss.x, boss.y);
+        
+        // Golden bow
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 6;
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 15;
+        
+        // Bow arc
+        ctx.beginPath();
+        ctx.arc(-40, -80, 50, Math.PI * 0.2, Math.PI * 0.8);
+        ctx.stroke();
+        
+        // Bow string
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 8;
+        const bowTop = {x: -40 + Math.cos(Math.PI * 0.2) * 50, y: -80 + Math.sin(Math.PI * 0.2) * 50};
+        const bowBot = {x: -40 + Math.cos(Math.PI * 0.8) * 50, y: -80 + Math.sin(Math.PI * 0.8) * 50};
+        ctx.beginPath();
+        ctx.moveTo(bowTop.x, bowTop.y);
+        ctx.lineTo(bowBot.x, bowBot.y);
+        ctx.stroke();
+        
+        // Magical arrow (PURPLE - Brahmastra)
+        ctx.strokeStyle = '#ff00ff';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#ff00ff';
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.moveTo(-40, -80);
+        ctx.lineTo(-80, -80);
+        ctx.stroke();
+        
+        // Arrow head
+        ctx.fillStyle = '#ff00ff';
+        ctx.beginPath();
+        ctx.moveTo(-80, -80);
+        ctx.lineTo(-70, -75);
+        ctx.lineTo(-70, -85);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+      }
+    } else {
+      // Boss spawns at each level when: enough kills made AND boss not yet spawned for this level
+      if (level <= CONFIG.maxLevel && !gameCompleted) {
+        // Check if we should spawn boss for current level
+        const shouldSpawnBoss = (bossDefeatedAtLevel < level) && (enemiesKilledThisLevel >= CONFIG.minKillsForBoss);
+        
+        if (shouldSpawnBoss && Math.random() < 0.05) { // 5% chance per frame = spawns very quickly
+          spawnBoss();
+          console.log('*** BOSS SPAWNING AT LEVEL', level, 'Name:', BOSS_NAMES[level-1], '***');
+        }
+      }
+    }
+
+    const px = screenW * player.xPct;
+    const py = screenH * player.y;
+
+    // Disable controls during capture sequence
+    if (!captureSequenceActive) {
+      if (keyState.up) player.y = clamp(player.y - (dt * 0.8), 0.06, 0.94);
+      if (keyState.down) player.y = clamp(player.y + (dt * 0.8), 0.06, 0.94);
+
+      if (gada.state === 'idle') {
+        const ahead = rakshas.find(r => r.x < screenW && r.x > px + 40);
+        if (ahead || (boss && Math.abs(boss.x - px) < 420)) {
+          gada.state = 'outgoing';
+          gada.x = px + player.size * 0.4;
+          gada.y = py - player.size * 0.05;
+          gada.vx = CONFIG.gadaSpeed;
+          gada.withHanuman = false;
+        }
+      }
+    } else {
+      // During capture, return gada to Hanuman
+      if (!gada.withHanuman) {
+        gada.state = 'returning';
+      }
+    }
+
+    if (gada.state === 'outgoing') {
+      gada.x += gada.vx * dt;
+      
+      for (let i = rakshas.length - 1; i >= 0; i--) {
+        const r = rakshas[i];
+        const ry = r.isFlying ? screenH * r.y : r.y;
+        if (circleRectCollision(gada.x, gada.y, 16, r.x - r.w/2, ry - r.h, r.w, r.h)) {
+          spawnParticles(r.x, ry - 28, 35, ['#8b0000', '#ff4500', '#ff8c00', '#ffd700']);
+          rakshas.splice(i, 1);
+          score += 100;
+          enemiesKilledThisLevel++; // Track kills
+          playSound('enemy_hit');
+          gada.state = 'returning';
+          break;
+        }
+      }
+      
+      if (boss && circleRectCollision(gada.x, gada.y, 16, boss.x - boss.w/2, boss.y - boss.h, boss.w, boss.h)) {
+        boss.hp -= 1;
+        playSound('boss_hit');
+        spawnParticles(boss.x, boss.y - 60, 40, ['#ff4500', '#ffd166', '#fff'], 220);
+        
+        if (level >= 5) {
+          spawnParticles(boss.x, boss.y - 60, 20, ['#ff9f1c', '#ffd166', '#fff'], 280);
+        }
+        
+        if (boss.hp <= 0) {
+          // Special case: Level 7 boss (Meghnath) uses Brahmastra to capture Hanuman
+          if (level === CONFIG.maxLevel && boss.hp <= 0 && !captureSequenceActive) {
+            console.log('*** MEGHNATH ACTIVATES BRAHMASTRA! ***');
+            captureSequenceActive = true;
+            capturePhase = 0;
+            captureTimer = 0;
+            boss.hp = 1; // Keep boss alive during capture
+            playSound('boss_hit');
+            
+            // Create 5 brahmastra rope loops from Meghnath
+            for (let i = 0; i < 5; i++) {
+              brahmastraLoops.push({
+                x: boss.x,
+                y: boss.y - 100,
+                targetX: px,
+                targetY: py,
+                radius: 40,
+                angle: (Math.PI * 2 * i) / 5,
+                speed: 200 + i * 20,
+                active: true
+              });
+            }
+          } else if (level < CONFIG.maxLevel) {
+            // Normal boss defeat for levels 1-6
+            score += 1500;
+            playSound('boss_defeat');
+            spawnParticles(boss.x, boss.y - 40, 100, ['#ff3b3b', '#ff8c00', '#ffd166', '#fff'], 300);
+            
+            bossDefeatedAtLevel = level;
+            boss = null;
+            
+            level++;
+            levelEl.textContent = level;
+            player.size = player.baseSize + (level - 1) * CONFIG.manaGrowPerLevel;
+            enemiesKilledThisLevel = 0; // Reset kill counter for new level
+            playSound('level_up');
+            console.log('*** BOSS DEFEATED! ADVANCING TO LEVEL', level, '***');
+            
+            // Level up particles
+            setTimeout(() => {
+              const hanX = screenW * player.xPct;
+              const hanY = screenH * player.y;
+              spawnParticles(hanX, hanY, 50, ['#ffd166', '#fff', '#ffaa00'], 240);
+            }, 500);
+          }
+        }
+        gada.state = 'returning';
+      }
+      
+      if (gada.x > screenW + 40) {
+        gada.state = 'returning';
+      }
+    } else if (gada.state === 'returning') {
+      const targetX = px + player.size * 0.35;
+      const targetY = py - player.size * 0.05;
+      
+      const dx = targetX - gada.x;
+      const dy = targetY - gada.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist > 5) {
+        const speed = CONFIG.gadaReturnSpeed * dt;
+        gada.x += (dx / dist) * speed;
+        gada.y += (dy / dist) * speed;
+      } else {
+        gada.x = targetX;
+        gada.y = targetY;
+      }
+      
+      for (let i = rakshas.length - 1; i >= 0; i--) {
+        const r = rakshas[i];
+        const ry = r.isFlying ? screenH * r.y : r.y;
+        if (circleRectCollision(gada.x, gada.y, 16, r.x - r.w/2, ry - r.h, r.w, r.h)) {
+          spawnParticles(r.x, ry - 28, 35, ['#8b0000', '#ff4500', '#ff8c00', '#ffd700']);
+          rakshas.splice(i, 1);
+          score += 100;
+          enemiesKilledThisLevel++; // Track kills
+          playSound('enemy_hit');
+        }
+      }
+      
+      if (Math.abs(gada.x - targetX) < 5 && Math.abs(gada.y - targetY) < 5) {
+        gada.state = 'idle';
+        gada.withHanuman = true;
+      }
+    }
+
+    if (!gada.withHanuman) {
+      const flaming = level >= 5;
+      drawGada(gada.x, gada.y, flaming);
+      
+      if (flaming && Math.random() < 0.5) {
+        spawnParticles(gada.x - rand(-6,6), gada.y - rand(3,10), 2, ['#ff9f1c', '#ffd166', '#fff'], 60);
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 200 * dt;
+      
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+      } else {
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    const hanX = screenW * player.xPct;
+    const hanY = screenH * player.y;
+    const inNamaskar = captureSequenceActive && capturePhase === 4;
+    drawHanuman(hanX, hanY, player.size, now, gada.withHanuman, inNamaskar);
+
+
+    scoreEl.textContent = score;
+    if (score > high) {
+      high = score;
+      localStorage.setItem('vatika_high', String(high));
+      highEl.textContent = high;
+    }
+
+    // Update boss status indicator
+    if (level <= CONFIG.maxLevel && !gameCompleted && bossDefeatedAtLevel < level) {
+      if (enemiesKilledThisLevel < CONFIG.minKillsForBoss) {
+        bossStatusEl.textContent = `⚔️ Boss Arrives In: ${CONFIG.minKillsForBoss - enemiesKilledThisLevel} kills`;
+        bossStatusEl.style.color = '#ffaa00';
+        bossStatusEl.style.display = 'block';
+      } else if (!boss) {
+        bossStatusEl.textContent = '⚠️ BOSS INCOMING! ⚠️';
+        bossStatusEl.style.color = '#ff0000';
+        bossStatusEl.style.display = 'block';
+      } else {
+        bossStatusEl.textContent = `🔥 DEFEAT ${BOSS_NAMES[level-1].toUpperCase()} TO ADVANCE! 🔥`;
+        bossStatusEl.style.color = '#ff0000';
+        bossStatusEl.style.display = 'block';
+      }
+    } else {
+      bossStatusEl.style.display = 'none';
+    }
+
+    // Brahmastra capture sequence (Level 7 - Meghnath)
+    if (captureSequenceActive) {
+      captureTimer += dt;
+      const px = screenW * player.xPct;
+      const py = screenH * player.y;
+      
+      if (capturePhase === 0) {
+        // PHASE 0: Shooting - Loops fly toward Hanuman
+        let allReached = true;
+        for (let loop of brahmastraLoops) {
+          if (!loop.active) continue;
+          
+          const dx = px - loop.x;
+          const dy = py - loop.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist > 10) {
+            loop.x += (dx / dist) * loop.speed * dt;
+            loop.y += (dy / dist) * loop.speed * dt;
+            loop.angle += dt * 3; // Rotating animation
+            allReached = false;
+          }
+        }
+        
+        if (allReached || captureTimer > 3) {
+          capturePhase = 1;
+          captureTimer = 0;
+          console.log('*** PHASE 1: BINDING! ***');
+        }
+      } else if (capturePhase === 1) {
+        // PHASE 1: Binding - Loops tighten around Hanuman (2 seconds)
+        // Gradually rotate Hanuman to standing position (90 degrees counter-clockwise)
+        hanumanRotation = Math.max(-Math.PI / 2, -(captureTimer / 2) * (Math.PI / 2));
+        
+        for (let loop of brahmastraLoops) {
+          if (loop.radius > 20) {
+            loop.radius -= dt * 30;
+            loop.angle += dt * 5; // Faster rotation
+          }
+        }
+        
+        if (captureTimer > 2) {
+          capturePhase = 2;
+          captureTimer = 0;
+          hanumanRotation = -Math.PI / 2; // Ensure it's exactly 90 degrees counter-clockwise
+          console.log('*** PHASE 2: CAPTURED! ***');
+        }
+      } else if (capturePhase === 2) {
+        // PHASE 2: Captured - Hanuman fully bound (1 second pause)
+        if (captureTimer > 1) {
+          capturePhase = 3;
+          captureTimer = 0;
+          console.log('*** PHASE 3: NIGHTTIME! ***');
+        }
+      } else if (capturePhase === 3) {
+        // PHASE 3: Brief pause before descent (0.5 seconds)
+        if (captureTimer > 0.5) {
+          capturePhase = 4;
+          captureTimer = 0;
+          player.y = 0.45; // Reset to mid-air for descent
+          console.log('*** PHASE 4: NAMASKAR DESCENT! ***');
+        }
+      } else if (capturePhase === 4) {
+        // PHASE 4: Namaskar descent - Hanuman descends in prayer pose
+        const groundY = 0.78; // Standing position on ground
+        if (player.y < groundY) {
+          player.y += dt * 0.2; // Slow, graceful descent
+          if (player.y > groundY) player.y = groundY;
+        }
+        
+        // After descending and 2 seconds, show ending
+        if (player.y >= groundY && captureTimer > 3) {
+          running = false;
+          captureScoreEl.textContent = score;
+          toBeContinuedEl.classList.add('show');
+          gameCompleted = true;
+          
+          if (score > high) {
+            high = score;
+            localStorage.setItem('vatika_high', String(high));
+            highEl.textContent = high;
+          }
+        }
+      }
+      
+      
+      // Draw brahmastra rope loops (PURPLE colors)
+      for (let loop of brahmastraLoops) {
+        if (!loop.active) continue;
+        
+        ctx.save();
+        ctx.translate(loop.x, loop.y);
+        ctx.rotate(loop.angle);
+        
+        // Magical glowing rope (PURPLE)
+        ctx.strokeStyle = '#ff00ff';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#ff00ff';
+        ctx.shadowBlur = 15;
+        
+        // Draw circular rope loop
+        ctx.beginPath();
+        ctx.arc(0, 0, loop.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner glow
+        ctx.strokeStyle = '#ffaaff';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(0, 0, loop.radius - 2, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Rope texture (cross-hatching)
+        ctx.strokeStyle = '#aa00aa';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+        for (let i = 0; i < 12; i++) {
+          const angle = (Math.PI * 2 * i) / 12;
+          const x1 = Math.cos(angle) * (loop.radius - 3);
+          const y1 = Math.sin(angle) * (loop.radius - 3);
+          const x2 = Math.cos(angle) * (loop.radius + 3);
+          const y2 = Math.sin(angle) * (loop.radius + 3);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
+      }
+      
+      // Add magical particles around loops (PURPLE colors)
+      if (Math.random() < 0.5 && capturePhase <= 2) {
+        for (let loop of brahmastraLoops) {
+          const angle = Math.random() * Math.PI * 2;
+          const x = loop.x + Math.cos(angle) * loop.radius;
+          const y = loop.y + Math.sin(angle) * loop.radius;
+          spawnParticles(x, y, 2, ['#ff00ff', '#ffaaff', '#aa00ff'], 80);
+        }
+      }
+      
+      // Draw thought bubble with Sanskrit mantra (PHASE 4 ONLY - during namaskar)
+      if (capturePhase === 4) {
+        const px = screenW * player.xPct;
+        const py = screenH * player.y;
+        
+        ctx.save();
+        
+        // Thought bubble clouds
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = '#666666';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 10;
+        
+        // Main thought bubble (above Hanuman's head - adjusted for standing position)
+        const bubbleX = px + 100;  // Slightly to the right
+        const bubbleY = py - 200;  // Higher up since he's standing
+        const bubbleW = 200;
+        const bubbleH = 80;
+        
+        ctx.beginPath();
+        ctx.ellipse(bubbleX, bubbleY, bubbleW/2, bubbleH/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Small thought bubble circles (connecting to head)
+        ctx.beginPath();
+        ctx.arc(px + 50, py - 120, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(px + 70, py - 160, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.shadowBlur = 0;
+        
+        // Sanskrit text in thought bubble
+        ctx.fillStyle = '#8B4513';
+        ctx.font = 'bold 28px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // First line: ॐ ब्रह्मणे
+        ctx.fillText('ॐ ब्रह्मणे', bubbleX, bubbleY - 20);
+        
+        // Second line: नमः
+        ctx.fillText('नमः', bubbleX, bubbleY + 20);
+        
+        ctx.restore();
+      }
+    }
+
+    if (rakshas.length === 0 && Math.random() < 0.01 && !gameCompleted) spawnRaksha();
+    if (trees.length === 0 && Math.random() < 0.01 && !gameCompleted) spawnTree();
+
+    if (!gameCompleted) {
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function resetGame() {
+    rakshas.length = 0;
+    trees.length = 0;
+    particles.length = 0;
+    weapons.length = 0;
+    boss = null;
+    gada.state = 'idle';
+    gada.withHanuman = true;
+    score = 0;
+    level = 1;
+    player.size = player.baseSize;
+    accRaksha = 0;
+    accTree = 0;
+    accumulated = 0;
+    lastTime = performance.now();
+    gameCompleted = false;
+    bossDefeatedAtLevel = 0;
+    enemiesKilledThisLevel = 0; // Reset kill counter
+    captureSequenceActive = false;
+    capturePhase = 0;
+    brahmastraLoops.length = 0;
+    captureTimer = 0;
+    nightDarkness = 0;
+    hanumanRotation = 0;
+    scoreEl.textContent = '0';
+    levelEl.textContent = '1';
+    bossStatusEl.style.display = 'none'; // Hide boss status
+    gameOverEl.classList.remove('show');
+    toBeContinuedEl.classList.remove('show');
+    running = true;
+    pauseBtn.textContent = 'Pause';
+    
+    spawnRaksha();
+    spawnTree();
+    
+    requestAnimationFrame(loop);
+  }
+
+  resetGame();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
