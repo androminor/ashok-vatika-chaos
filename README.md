@@ -1,5 +1,5 @@
 # ashok-vatika-chaos
-Sri Hanuman burning ashok vatika during lanka visit
+Sri Hanuman destroying ashok vatika during lanka visit
 🐒🔥 Ashok Vatika Chaos — Ramayan Edition
 A fast-paced browser-based action game inspired by the Ramayan, where Hanuman storms through Ashok Vatika, battling Rakshasas, burning trees, defeating demon commanders, and ultimately facing Meghnath.
 Built using pure HTML5 Canvas and Vanilla JavaScript, this project focuses on performance, animation, sound design, and gameplay mechanics — without any external libraries or frameworks.
