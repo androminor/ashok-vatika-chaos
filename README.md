@@ -1,6 +1,8 @@
 # ashok-vatika-chaos 
 🚀 How to Run -> https://ashok-vatika-chaos.vercel.app/
 
+Note - **This is not a game although it may look like one. I am trying to present (Itihas) History as it is so do not consider it as a mythology. The purpose is to let people know that it actually happened in the country of bharat & how greatful the country is to welcome those yugs of Gods**. 
+
 Sri Hanuman destroying ashok vatika during lanka visit
 
 🐒🔥 Ashok Vatika Chaos — Ramayan Edition
